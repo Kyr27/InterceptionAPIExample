@@ -106,7 +106,8 @@ int main()
 		if (receivedKeys > 0) {
 			InterceptionKeyStroke& keyStroke = *(InterceptionKeyStroke*)&stroke;
 
-			std::cout << "Key pressed: " << keyStroke.code << std::endl;
+			// Output pressed keys to the console along with their state (whether the key is down or up)
+			process_key_event(keyStroke);
 
 			// Terminate the loop and exit the application if the user pressed the End button
 			if (keyStroke.code == scanCodeEnd) {

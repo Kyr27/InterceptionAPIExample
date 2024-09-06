@@ -8,7 +8,10 @@
 // The libs are for both debug and release configurations, because they contain debug symbols within them.
 #pragma comment(lib, "interception.lib")
 
-InterceptionContext context{ NULL };
+namespace Globals
+{
+	InterceptionContext context{ NULL };
+}
 
 void send_key(InterceptionContext context, InterceptionDevice device, unsigned short scanCode, bool keyUp = false)
 {
@@ -40,9 +43,9 @@ BOOL WINAPI ConsoleHandler(DWORD dwCtrlType) {
 	case CTRL_CLOSE_EVENT:
 	case CTRL_LOGOFF_EVENT:
 	case CTRL_SHUTDOWN_EVENT:
-		if (context != NULL) {
+		if (Globals::context != NULL) {
 			// Destroy the context if the application is closed via any of the above cases
-			interception_destroy_context(context);
+			interception_destroy_context(Globals::context);
 			std::cout << "Context destroyed\n";
 		}
 		return TRUE;
@@ -68,19 +71,19 @@ int main()
 
 	// Initialize interception context
 
-	context = interception_create_context();
+	Globals::context = interception_create_context();
 	std::cout << "Context Set\n";
 
 
 	// Set the event filtering to keyboard, so we listen in on keyboard events
 
-	interception_set_filter(context, interception_is_keyboard, INTERCEPTION_FILTER_KEY_ALL);
+	interception_set_filter(Globals::context, interception_is_keyboard, INTERCEPTION_FILTER_KEY_ALL);
 	std::cout << "Filter set\n";
 
 
 	// Wait for input event from any keyboard device and generate a handle to that device
 
-	InterceptionDevice device = interception_wait(context);
+	InterceptionDevice device = interception_wait(Globals::context);
 
 
 	// Convert Virtual Keycodes into ScanCodes that interception can read
@@ -91,14 +94,14 @@ int main()
 
 	// Run the key loop in another thread, so as to not interrupt the thread that is checking for scanCodeEnd
 
-	std::thread keyThread(send_key_loop, context, device, scanCodeA, std::ref(running)); // The std::ref() function ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
+	std::thread keyThread(send_key_loop, Globals::context, device, scanCodeA, std::ref(running)); // The std::ref() function ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
 
 
 	// Wait for End key to be pressed before terminating (non keyboard blocking)
 
 	InterceptionStroke stroke;
 	while (running) {
-		int receivedKeys = interception_receive(context, device, &stroke, 1);
+		int receivedKeys = interception_receive(Globals::context, device, &stroke, 1);
 
 		if (receivedKeys > 0) {
 			InterceptionKeyStroke& keyStroke = *(InterceptionKeyStroke*)&stroke;
@@ -115,11 +118,12 @@ int main()
 			// keyStroke.code = scanCodeA
 
 			// Continue sending the stroke to the OS
-			interception_send(context, device, &stroke, 1);
+			interception_send(Globals::context, device, &stroke, 1);
 		}
 
 		Sleep(10); // Prevent high CPU usage
 	}
+
 
 	// Inform the user that application is exiting
 
@@ -133,7 +137,7 @@ int main()
 
 	// Destroy the context
 
-	if (context != NULL) interception_destroy_context(context);
+	if (Globals::context != NULL) interception_destroy_context(Globals::context);
 
 
 	// Wait for user to confirm

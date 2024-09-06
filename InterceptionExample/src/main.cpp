@@ -56,11 +56,11 @@ BOOL WINAPI ConsoleHandler(DWORD dwCtrlType) {
 
 int main()
 {
-	// Used to control the multi-threaded loop
+	// This variable is used to control the multi-threaded loop
 	std::atomic<bool> running{ true };
 
 
-	// Set Console Control Handler, so we can handle all console closing actions
+	// Set Console Control Handler, so we can handle all sorts of console closing cases
 
 	if (!SetConsoleCtrlHandler(ConsoleHandler, true))
 	{

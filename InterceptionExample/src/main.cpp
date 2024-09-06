@@ -5,6 +5,11 @@
 #include <atomic>
 #include "interception.h"
 
+// Todo:
+// Figure out a way to load the .dll from lib folder directly, so that theres no need to drag the .dll to where the .exe file is
+// Make a map that holds scan codes as values and the scan code can be retrieved using a key
+// See if theres a way to move the context global into int main(), and pass it as a parameter to the ConsoleHandler function which needs it
+
 // The libs are for both debug and release configurations, because they contain debug symbols within them.
 #pragma comment(lib, "interception.lib")
 

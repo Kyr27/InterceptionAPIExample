@@ -100,8 +100,9 @@ int main()
 	// Wait for End key to be pressed before terminating (non keyboard blocking)
 
 	InterceptionStroke stroke;
+	int receivedKeys;
 	while (running) {
-		int receivedKeys = interception_receive(Globals::context, device, &stroke, 1);
+		receivedKeys = interception_receive(Globals::context, device, &stroke, 1);
 
 		if (receivedKeys > 0) {
 			InterceptionKeyStroke& keyStroke = *(InterceptionKeyStroke*)&stroke;

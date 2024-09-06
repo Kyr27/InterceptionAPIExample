@@ -29,6 +29,10 @@ mono_crash.*
 bld/
 [Bb]in/
 [Bb]in-int/
+[Dd]ebug64/
+[Dd]ebug32/
+[Rr]elease64/
+[Rr]elease32/
 [Oo]bj/
 [Oo]ut/
 [Ll]og/

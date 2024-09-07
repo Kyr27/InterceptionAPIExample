@@ -14,8 +14,9 @@
 // The libs are for both debug and release configurations, because they contain debug symbols within them.
 #pragma comment(lib, "interception.lib")
 
-namespace Globals
+namespace g
 {
+	// It has to be a global so i can destroy it from console control handler (which does not allow me to pass parameters)
 	InterceptionContext context{ NULL };
 }
 
@@ -46,19 +47,19 @@ int main()
 
 	// Initialize interception context
 
-	Globals::context = interception_create_context();
+	g::context = interception_create_context();
 	std::cout << "Context Set\n";
 
 
 	// Set the event filtering to keyboard, so we listen in on keyboard events
 
-	interception_set_filter(Globals::context, interception_is_keyboard, INTERCEPTION_FILTER_KEY_ALL);
+	interception_set_filter(g::context, interception_is_keyboard, INTERCEPTION_FILTER_KEY_ALL);
 	std::cout << "Filter set\n";
 
 
 	// Wait for input event from any keyboard device and generate a handle to that device
 
-	InterceptionDevice device = interception_wait(Globals::context);
+	InterceptionDevice device = interception_wait(g::context);
 
 
 	// Convert Virtual Keycodes into scancodes that interception can read and store them in key_scancodes
@@ -69,7 +70,7 @@ int main()
 	// run the key loop in another thread, so as to not interrupt the thread that is checking for VK_END
 	// The std::ref() around atomic running ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
 
-	std::thread send_key_thread(Keyboard::send_key_loop, Globals::context, device, key_scancodes['A'], std::ref(running));
+	std::thread send_key_thread(Keyboard::send_key_loop, g::context, device, key_scancodes['A'], std::ref(running));
 
 
 	// Monitor for VK_END and quit if it gets pressed
@@ -87,9 +88,9 @@ int main()
 	send_key_thread.join();
 
 
-	// Destroy the context
+	// Destroy interception context
 
-	if (Globals::context != NULL) interception_destroy_context(Globals::context);
+	if (g::context != NULL) interception_destroy_context(g::context);
 
 
 	// Wait for user to confirm
@@ -105,7 +106,7 @@ void run(std::atomic<bool>& running, InterceptionDevice& device, std::map<int, U
 	InterceptionStroke stroke;
 	int received_keys;
 	while (running) {
-		received_keys = interception_receive(Globals::context, device, &stroke, 1);
+		received_keys = interception_receive(g::context, device, &stroke, 1);
 
 		if (received_keys > 0) {
 			InterceptionKeyStroke& key_stroke = *(InterceptionKeyStroke*)&stroke;
@@ -123,7 +124,7 @@ void run(std::atomic<bool>& running, InterceptionDevice& device, std::map<int, U
 			// keyStroke.code = key_scancodes['A'];
 
 			// Continue sending the stroke to the OS
-			interception_send(Globals::context, device, &stroke, 1);
+			interception_send(g::context, device, &stroke, 1);
 		}
 
 		Sleep(10); // Prevent high CPU usage
@@ -137,9 +138,9 @@ BOOL WINAPI console_handler(DWORD dwCtrlType) {
 	case CTRL_CLOSE_EVENT:
 	case CTRL_LOGOFF_EVENT:
 	case CTRL_SHUTDOWN_EVENT:
-		if (Globals::context != NULL) {
+		if (g::context != NULL) {
 			// Destroy the context if the application is closed via any of the above cases
-			interception_destroy_context(Globals::context);
+			interception_destroy_context(g::context);
 			std::cout << "Context destroyed\n";
 		}
 		return TRUE;

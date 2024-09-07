@@ -3,6 +3,7 @@
 #include <conio.h>
 #include <thread>
 #include <atomic>
+#include <map>
 #include "interception.h"
 
 // Todo:
@@ -59,8 +60,66 @@ BOOL WINAPI ConsoleHandler(DWORD dwCtrlType) {
 	}
 }
 
+void GetKeyScanCodes(std::map<int, UINT> &KeyScanCodes)
+{
+	for (char key = 'A'; key <= 'Z'; ++key)
+	{
+		SHORT vk = VkKeyScan(key);
+
+		// Check if we succeeded in mapping the key to a virtual key
+		if (!vk)
+		{
+			std::cout << "Key: " << key << " can not be mapped to a virtual keycode\n";
+			continue;
+		}
+
+		// Extract the lower byte, which contains the Virtual Keycode (the upper byte is the shift state)
+		UINT virtualKeyCode = vk & 0xFF;
+
+
+		// Store the scan code in the map, using the character as the key
+		KeyScanCodes[static_cast<int>(key)] = MapVirtualKey(virtualKeyCode, MAPVK_VK_TO_VSC);
+	}
+
+	// Additionally, add non character keys such as VK_END
+	KeyScanCodes[VK_END] = MapVirtualKey(VK_END, MAPVK_VK_TO_VSC);
+}
+
+void Run(std::atomic<bool> &running, InterceptionDevice &device, std::map<int, UINT> &keyScanCodes)
+{
+	InterceptionStroke stroke;
+	int receivedKeys;
+	while (running) {
+		receivedKeys = interception_receive(Globals::context, device, &stroke, 1);
+
+		if (receivedKeys > 0) {
+			InterceptionKeyStroke& keyStroke = *(InterceptionKeyStroke*)&stroke;
+
+			// Output pressed keys to the console along with their state (whether the key is down or up)
+			process_key_event(keyStroke);
+
+			// Terminate the loop and exit the application if the user pressed the End button
+			if (keyStroke.code == keyScanCodes[VK_END]) {
+				running = false;
+				break;
+			}
+
+			// could even make it so that every key i press is modified into the A key
+			// keyStroke.code = scanCodeA
+
+			// Continue sending the stroke to the OS
+			interception_send(Globals::context, device, &stroke, 1);
+		}
+
+		Sleep(10); // Prevent high CPU usage
+	}
+}
+
 int main()
 {
+	// Holds the scan codes (value) of character keys (key) on a keyboard
+	std::map<int, UINT> keyScanCodes{};
+
 	// This variable is used to control the multi-threaded loop
 	std::atomic<bool> running{ true };
 
@@ -91,45 +150,20 @@ int main()
 	InterceptionDevice device = interception_wait(Globals::context);
 
 
-	// Convert Virtual Keycodes into ScanCodes that interception can read
+	// Convert Virtual Keycodes into ScanCodes that interception can read and store them in KeyScanCodes
 
-	UINT scanCodeA = MapVirtualKey(0x41, MAPVK_VK_TO_VSC);
-	UINT scanCodeEnd = MapVirtualKey(VK_END, MAPVK_VK_TO_VSC);
-
-
-	// Run the key loop in another thread, so as to not interrupt the thread that is checking for scanCodeEnd
-
-	std::thread keyThread(send_key_loop, Globals::context, device, scanCodeA, std::ref(running)); // The std::ref() function ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
+	GetKeyScanCodes(keyScanCodes);
 
 
-	// Wait for End key to be pressed before terminating (non keyboard blocking)
+	// Run the key loop in another thread, so as to not interrupt the thread that is checking for VK_END
+	// The std::ref() around atomic running ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
 
-	InterceptionStroke stroke;
-	int receivedKeys;
-	while (running) {
-		receivedKeys = interception_receive(Globals::context, device, &stroke, 1);
+	std::thread keyThread(send_key_loop, Globals::context, device, keyScanCodes['A'], std::ref(running)); 
 
-		if (receivedKeys > 0) {
-			InterceptionKeyStroke& keyStroke = *(InterceptionKeyStroke*)&stroke;
 
-			// Output pressed keys to the console along with their state (whether the key is down or up)
-			process_key_event(keyStroke);
+	// Monitor for VK_END and quit if it pressed
 
-			// Terminate the loop and exit the application if the user pressed the End button
-			if (keyStroke.code == scanCodeEnd) {
-				running = false;
-				break;
-			}
-
-			// could even make it so that every key i press is modified into the A key
-			// keyStroke.code = scanCodeA
-
-			// Continue sending the stroke to the OS
-			interception_send(Globals::context, device, &stroke, 1);
-		}
-
-		Sleep(10); // Prevent high CPU usage
-	}
+	Run(std::ref(running), device, keyScanCodes);
 
 
 	// Inform the user that application is exiting

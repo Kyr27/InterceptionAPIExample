@@ -8,7 +8,7 @@
 
 // Todo:
 // Figure out a way to load the .dll from lib folder directly, so that theres no need to drag the .dll to where the .exe file is
-// See if theres a way to move the context global into int main(), and pass it as a parameter to the ConsoleHandler function which needs it
+// See if theres a way to move the context global into int main(), and pass it as a parameter to the console_handler function which needs it
 
 // The libs are for both debug and release configurations, because they contain debug symbols within them.
 #pragma comment(lib, "interception.lib")
@@ -18,20 +18,20 @@ namespace Globals
 	InterceptionContext context{ NULL };
 }
 
-void send_key(InterceptionContext context, InterceptionDevice device, unsigned short scanCode, bool keyUp = false)
+void send_key(InterceptionContext context, InterceptionDevice device, unsigned short scancode, bool key_up = false)
 {
 	InterceptionKeyStroke stroke;
-	stroke.code = scanCode;
-	stroke.state = keyUp ? INTERCEPTION_KEY_UP : INTERCEPTION_KEY_DOWN;
+	stroke.code = scancode;
+	stroke.state = key_up ? INTERCEPTION_KEY_UP : INTERCEPTION_KEY_DOWN;
 
 	interception_send(context, device, (InterceptionStroke*)&stroke, 1);
 }
 
-void send_key_loop(InterceptionContext context, InterceptionDevice device, UINT scanCode, std::atomic<bool>& running) {
+void send_key_loop(InterceptionContext context, InterceptionDevice device, UINT scancode, std::atomic<bool>& running) {
 	while (running) {
-		send_key(context, device, scanCode);
+		send_key(context, device, scancode);
 		Sleep(200);
-		send_key(context, device, scanCode, true);
+		send_key(context, device, scancode, true);
 		Sleep(50);
 	}
 }
@@ -41,7 +41,7 @@ void process_key_event(InterceptionKeyStroke& stroke) {
 		<< ", state = " << stroke.state << std::endl;
 }
 
-BOOL WINAPI ConsoleHandler(DWORD dwCtrlType) {
+BOOL WINAPI console_handler(DWORD dwCtrlType) {
 	switch (dwCtrlType) {
 	case CTRL_C_EVENT:
 	case CTRL_BREAK_EVENT:
@@ -59,7 +59,7 @@ BOOL WINAPI ConsoleHandler(DWORD dwCtrlType) {
 	}
 }
 
-void GetKeyScanCodes(std::map<int, UINT> &KeyScanCodes)
+void get_key_scancodes(std::map<int, UINT> &key_scancodes)
 {
 	for (char key = 'A'; key <= 'Z'; ++key)
 	{
@@ -73,38 +73,38 @@ void GetKeyScanCodes(std::map<int, UINT> &KeyScanCodes)
 		}
 
 		// Extract the lower byte, which contains the Virtual Keycode (the upper byte is the shift state)
-		UINT virtualKeyCode = vk & 0xFF;
+		UINT virtual_key = vk & 0xFF;
 
 
 		// Store the scan code in the map, using the character as the key
-		KeyScanCodes[static_cast<int>(key)] = MapVirtualKey(virtualKeyCode, MAPVK_VK_TO_VSC);
+		key_scancodes[static_cast<int>(key)] = MapVirtualKey(virtual_key, MAPVK_VK_TO_VSC);
 	}
 
 	// Additionally, add non character keys such as VK_END
-	KeyScanCodes[VK_END] = MapVirtualKey(VK_END, MAPVK_VK_TO_VSC);
+	key_scancodes[VK_END] = MapVirtualKey(VK_END, MAPVK_VK_TO_VSC);
 }
 
-void Run(std::atomic<bool> &running, InterceptionDevice &device, std::map<int, UINT> &keyScanCodes)
+void run(std::atomic<bool> &running, InterceptionDevice &device, std::map<int, UINT> &key_scancodes)
 {
 	InterceptionStroke stroke;
-	int receivedKeys;
+	int received_keys;
 	while (running) {
-		receivedKeys = interception_receive(Globals::context, device, &stroke, 1);
+		received_keys = interception_receive(Globals::context, device, &stroke, 1);
 
-		if (receivedKeys > 0) {
-			InterceptionKeyStroke& keyStroke = *(InterceptionKeyStroke*)&stroke;
+		if (received_keys > 0) {
+			InterceptionKeyStroke& key_stroke = *(InterceptionKeyStroke*)&stroke;
 
 			// Output pressed keys to the console along with their state (whether the key is down or up)
-			process_key_event(keyStroke);
+			process_key_event(key_stroke);
 
 			// Terminate the loop and exit the application if the user pressed the End button
-			if (keyStroke.code == keyScanCodes[VK_END]) {
+			if (key_stroke.code == key_scancodes[VK_END]) {
 				running = false;
 				break;
 			}
 
 			// could even make it so that every key i press is modified into the A key
-			// keyStroke.code = scanCodeA
+			// keyStroke.code = key_scancodes['A'];
 
 			// Continue sending the stroke to the OS
 			interception_send(Globals::context, device, &stroke, 1);
@@ -117,7 +117,7 @@ void Run(std::atomic<bool> &running, InterceptionDevice &device, std::map<int, U
 int main()
 {
 	// Holds the scan codes (value) of character keys (key) on a keyboard
-	std::map<int, UINT> keyScanCodes{};
+	std::map<int, UINT> key_scancodes{};
 
 	// This variable is used to control the multi-threaded loop
 	std::atomic<bool> running{ true };
@@ -125,7 +125,7 @@ int main()
 
 	// Set Console Control Handler, so we can handle all sorts of console closing cases
 
-	if (!SetConsoleCtrlHandler(ConsoleHandler, true))
+	if (!SetConsoleCtrlHandler(console_handler, true))
 	{
 		std::cerr << "Failed to set console control handler\n";
 		return EXIT_FAILURE;
@@ -149,20 +149,20 @@ int main()
 	InterceptionDevice device = interception_wait(Globals::context);
 
 
-	// Convert Virtual Keycodes into ScanCodes that interception can read and store them in KeyScanCodes
+	// Convert Virtual Keycodes into scancodes that interception can read and store them in key_scancodes
 
-	GetKeyScanCodes(keyScanCodes);
+	get_key_scancodes(key_scancodes);
 
 
-	// Run the key loop in another thread, so as to not interrupt the thread that is checking for VK_END
+	// run the key loop in another thread, so as to not interrupt the thread that is checking for VK_END
 	// The std::ref() around atomic running ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
 
-	std::thread keyThread(send_key_loop, Globals::context, device, keyScanCodes['A'], std::ref(running)); 
+	std::thread send_key_thread(send_key_loop, Globals::context, device, key_scancodes['A'], std::ref(running)); 
 
 
 	// Monitor for VK_END and quit if it pressed
 
-	Run(std::ref(running), device, keyScanCodes);
+	run(std::ref(running), device, key_scancodes);
 
 
 	// Inform the user that application is exiting
@@ -172,7 +172,7 @@ int main()
 
 	// Join the two threads back into one
 
-	keyThread.join();
+	send_key_thread.join();
 
 
 	// Destroy the context

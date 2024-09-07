@@ -18,28 +18,57 @@ namespace Globals
 	InterceptionContext context{ NULL };
 }
 
-void send_key(InterceptionContext context, InterceptionDevice device, unsigned short scancode, bool key_up = false)
+namespace Keyboard
 {
-	InterceptionKeyStroke stroke;
-	stroke.code = scancode;
-	stroke.state = key_up ? INTERCEPTION_KEY_UP : INTERCEPTION_KEY_DOWN;
+	void send_key(InterceptionContext context, InterceptionDevice device, unsigned short scancode, bool key_up = false)
+	{
+		InterceptionKeyStroke stroke;
+		stroke.code = scancode;
+		stroke.state = key_up ? INTERCEPTION_KEY_UP : INTERCEPTION_KEY_DOWN;
 
-	interception_send(context, device, (InterceptionStroke*)&stroke, 1);
-}
+		interception_send(context, device, (InterceptionStroke*)&stroke, 1);
+	}
 
-void send_key_loop(InterceptionContext context, InterceptionDevice device, UINT scancode, std::atomic<bool>& running) {
-	while (running) {
-		send_key(context, device, scancode);
-		Sleep(200);
-		send_key(context, device, scancode, true);
-		Sleep(50);
+	void send_key_loop(InterceptionContext context, InterceptionDevice device, UINT scancode, std::atomic<bool>& running) {
+		while (running) {
+			send_key(context, device, scancode);
+			Sleep(200);
+			send_key(context, device, scancode, true);
+			Sleep(50);
+		}
+	}
+
+	void process_key_event(InterceptionKeyStroke& stroke) {
+		std::cout << "Key event: code = " << stroke.code
+			<< ", state = " << stroke.state << std::endl;
+	}
+
+	void get_key_scancodes(std::map<int, UINT>& key_scancodes)
+	{
+		for (char key = 'A'; key <= 'Z'; ++key)
+		{
+			SHORT vk = VkKeyScan(key);
+
+			// Check if we succeeded in mapping the key to a virtual key
+			if (!vk)
+			{
+				std::cout << "Key: " << key << " can not be mapped to a virtual keycode\n";
+				continue;
+			}
+
+			// Extract the lower byte, which contains the Virtual Keycode (the upper byte is the shift state)
+			UINT virtual_key = vk & 0xFF;
+
+
+			// Store the scan code in the map, using the character as the key
+			key_scancodes[static_cast<int>(key)] = MapVirtualKey(virtual_key, MAPVK_VK_TO_VSC);
+		}
+
+		// Additionally, add non character keys such as VK_END
+		key_scancodes[VK_END] = MapVirtualKey(VK_END, MAPVK_VK_TO_VSC);
 	}
 }
 
-void process_key_event(InterceptionKeyStroke& stroke) {
-	std::cout << "Key event: code = " << stroke.code
-		<< ", state = " << stroke.state << std::endl;
-}
 
 BOOL WINAPI console_handler(DWORD dwCtrlType) {
 	switch (dwCtrlType) {
@@ -59,32 +88,8 @@ BOOL WINAPI console_handler(DWORD dwCtrlType) {
 	}
 }
 
-void get_key_scancodes(std::map<int, UINT> &key_scancodes)
-{
-	for (char key = 'A'; key <= 'Z'; ++key)
-	{
-		SHORT vk = VkKeyScan(key);
 
-		// Check if we succeeded in mapping the key to a virtual key
-		if (!vk)
-		{
-			std::cout << "Key: " << key << " can not be mapped to a virtual keycode\n";
-			continue;
-		}
-
-		// Extract the lower byte, which contains the Virtual Keycode (the upper byte is the shift state)
-		UINT virtual_key = vk & 0xFF;
-
-
-		// Store the scan code in the map, using the character as the key
-		key_scancodes[static_cast<int>(key)] = MapVirtualKey(virtual_key, MAPVK_VK_TO_VSC);
-	}
-
-	// Additionally, add non character keys such as VK_END
-	key_scancodes[VK_END] = MapVirtualKey(VK_END, MAPVK_VK_TO_VSC);
-}
-
-void run(std::atomic<bool> &running, InterceptionDevice &device, std::map<int, UINT> &key_scancodes)
+void run(std::atomic<bool>& running, InterceptionDevice& device, std::map<int, UINT>& key_scancodes)
 {
 	InterceptionStroke stroke;
 	int received_keys;
@@ -95,7 +100,7 @@ void run(std::atomic<bool> &running, InterceptionDevice &device, std::map<int, U
 			InterceptionKeyStroke& key_stroke = *(InterceptionKeyStroke*)&stroke;
 
 			// Output pressed keys to the console along with their state (whether the key is down or up)
-			process_key_event(key_stroke);
+			Keyboard::process_key_event(key_stroke);
 
 			// Terminate the loop and exit the application if the user pressed the End button
 			if (key_stroke.code == key_scancodes[VK_END]) {
@@ -151,13 +156,13 @@ int main()
 
 	// Convert Virtual Keycodes into scancodes that interception can read and store them in key_scancodes
 
-	get_key_scancodes(key_scancodes);
+	Keyboard::get_key_scancodes(key_scancodes);
 
 
 	// run the key loop in another thread, so as to not interrupt the thread that is checking for VK_END
 	// The std::ref() around atomic running ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
 
-	std::thread send_key_thread(send_key_loop, Globals::context, device, key_scancodes['A'], std::ref(running)); 
+	std::thread send_key_thread(Keyboard::send_key_loop, Globals::context, device, key_scancodes['A'], std::ref(running));
 
 
 	// Monitor for VK_END and quit if it pressed

@@ -72,7 +72,7 @@ int main()
 	std::thread send_key_thread(Keyboard::send_key_loop, Globals::context, device, key_scancodes['A'], std::ref(running));
 
 
-	// Monitor for VK_END and quit if it pressed
+	// Monitor for VK_END and quit if it gets pressed
 
 	run(std::ref(running), device, key_scancodes);
 

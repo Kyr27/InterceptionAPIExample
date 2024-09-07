@@ -68,13 +68,7 @@ int main()
 	Keyboard::get_key_scancodes(key_scancodes);
 
 
-	// run the key loop in another thread, so as to not interrupt the thread that is checking for VK_END
-	// The std::ref() around atomic running ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
-
-	std::thread send_key_thread(Keyboard::send_key_loop, g::input_context, device, key_scancodes['A'], std::ref(running));
-
-
-	// Monitor for VK_END and quit if it gets pressed
+	// Run the main logic
 
 	run(std::ref(running), device, key_scancodes);
 
@@ -82,11 +76,6 @@ int main()
 	// Inform the user that application is exiting
 
 	std::cout << "Exiting application...\n";
-
-
-	// Join the two threads back into one
-
-	send_key_thread.join();
 
 
 	// Destroy interception context
@@ -104,6 +93,11 @@ int main()
 
 void run(std::atomic<bool>& running, InterceptionDevice& device, std::map<int, UINT>& key_scancodes)
 {
+	// run the key loop in another thread, so as to not interrupt the thread that is checking for VK_END
+	// The std::ref() around atomic running ensures that running is passed by reference to the new thread, as std::atomic<bool> cannot be copied. Without std::ref(), std::thread will attempt to copy the arguments leading to errors.
+
+	std::thread send_key_thread(Keyboard::send_key_loop, g::input_context, device, key_scancodes['A'], std::ref(running));
+
 	InterceptionStroke stroke;
 	int received_keys;
 	while (running) {
@@ -130,6 +124,11 @@ void run(std::atomic<bool>& running, InterceptionDevice& device, std::map<int, U
 
 		Sleep(10); // Prevent high CPU usage
 	}
+
+
+	// Join the two threads back into one after VK_END is received
+
+	if (send_key_thread.joinable()) send_key_thread.join();
 }
 
 BOOL WINAPI console_handler(DWORD dwCtrlType) {

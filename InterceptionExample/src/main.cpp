@@ -20,54 +20,11 @@ namespace Globals
 }
 
 
-BOOL WINAPI console_handler(DWORD dwCtrlType) {
-	switch (dwCtrlType) {
-	case CTRL_C_EVENT:
-	case CTRL_BREAK_EVENT:
-	case CTRL_CLOSE_EVENT:
-	case CTRL_LOGOFF_EVENT:
-	case CTRL_SHUTDOWN_EVENT:
-		if (Globals::context != NULL) {
-			// Destroy the context if the application is closed via any of the above cases
-			interception_destroy_context(Globals::context);
-			std::cout << "Context destroyed\n";
-		}
-		return TRUE;
-	default:
-		return FALSE;
-	}
-}
+// Forward Declarations
 
+void run(std::atomic<bool>& running, InterceptionDevice& device, std::map<int, UINT>& key_scancodes);
+BOOL WINAPI console_handler(DWORD dwCtrlType);
 
-void run(std::atomic<bool>& running, InterceptionDevice& device, std::map<int, UINT>& key_scancodes)
-{
-	InterceptionStroke stroke;
-	int received_keys;
-	while (running) {
-		received_keys = interception_receive(Globals::context, device, &stroke, 1);
-
-		if (received_keys > 0) {
-			InterceptionKeyStroke& key_stroke = *(InterceptionKeyStroke*)&stroke;
-
-			// Output pressed keys to the console along with their state (whether the key is down or up)
-			Keyboard::process_key_event(key_stroke);
-
-			// Terminate the loop and exit the application if the user pressed the End button
-			if (key_stroke.code == key_scancodes[VK_END]) {
-				running = false;
-				break;
-			}
-
-			// could even make it so that every key i press is modified into the A key
-			// keyStroke.code = key_scancodes['A'];
-
-			// Continue sending the stroke to the OS
-			interception_send(Globals::context, device, &stroke, 1);
-		}
-
-		Sleep(10); // Prevent high CPU usage
-	}
-}
 
 int main()
 {
@@ -141,4 +98,52 @@ int main()
 	static_cast<void>(_getch());  // cast to void to tell the compiler to shut up
 
 	return EXIT_SUCCESS;
+}
+
+void run(std::atomic<bool>& running, InterceptionDevice& device, std::map<int, UINT>& key_scancodes)
+{
+	InterceptionStroke stroke;
+	int received_keys;
+	while (running) {
+		received_keys = interception_receive(Globals::context, device, &stroke, 1);
+
+		if (received_keys > 0) {
+			InterceptionKeyStroke& key_stroke = *(InterceptionKeyStroke*)&stroke;
+
+			// Output pressed keys to the console along with their state (whether the key is down or up)
+			Keyboard::process_key_event(key_stroke);
+
+			// Terminate the loop and exit the application if the user pressed the End button
+			if (key_stroke.code == key_scancodes[VK_END]) {
+				running = false;
+				break;
+			}
+
+			// could even make it so that every key i press is modified into the A key
+			// keyStroke.code = key_scancodes['A'];
+
+			// Continue sending the stroke to the OS
+			interception_send(Globals::context, device, &stroke, 1);
+		}
+
+		Sleep(10); // Prevent high CPU usage
+	}
+}
+
+BOOL WINAPI console_handler(DWORD dwCtrlType) {
+	switch (dwCtrlType) {
+	case CTRL_C_EVENT:
+	case CTRL_BREAK_EVENT:
+	case CTRL_CLOSE_EVENT:
+	case CTRL_LOGOFF_EVENT:
+	case CTRL_SHUTDOWN_EVENT:
+		if (Globals::context != NULL) {
+			// Destroy the context if the application is closed via any of the above cases
+			interception_destroy_context(Globals::context);
+			std::cout << "Context destroyed\n";
+		}
+		return TRUE;
+	default:
+		return FALSE;
+	}
 }

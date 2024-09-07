@@ -17,7 +17,7 @@
 namespace g
 {
 	// It has to be a global so i can destroy it from console control handler (which does not allow me to pass parameters)
-	InterceptionContext input_context{ NULL };
+	static InterceptionContext input_context{ NULL };
 }
 
 
